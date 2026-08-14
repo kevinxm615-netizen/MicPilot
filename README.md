@@ -31,6 +31,8 @@ A native macOS menu bar app for switching the system default audio input device,
 
 DJI Mic Mini / Mic Mini 2 使用 VID `0x2CA3`、PID `0x4011`、接口 6、Bulk IN `0x86` 的 v2 状态推送读取 TX1/TX2 电量等级和充电状态。DJI Mic、Mic 2、Mic 3 及其他 DJI 音频设备会被识别，并尝试读取标准 HID Battery System；设备未公开可读接口时显示「暂不可读」，不会伪造百分比。
 
+macOS 上支持 DJI Mic Mini 手机 USB-C 接收器。App 会从接收器设备内部查找未注册到全局 IORegistry 的状态接口，并在运行期间保持只读连接，以免系统配件服务抢占接口。
+
 App 对 DJI 只读取接收器主动推送的状态，不发送设置命令；对 Hollyland 只发送身份/状态查询，不修改增益、降噪、配对或固件。
 
 ## 系统要求

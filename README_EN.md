@@ -31,6 +31,8 @@ It first attempts the LARK status-query protocol for an exact battery percentage
 
 DJI Mic Mini and Mic Mini 2 battery data is read from the receiver's v2 status stream using vendor ID `0x2CA3`, product ID `0x4011`, interface 6, and Bulk IN endpoint `0x86`. MicPilot can display separate TX1 and TX2 battery levels and charging states.
 
+The DJI Mic Mini mobile USB-C receiver is supported on macOS. MicPilot discovers its status interface through the receiver device even when that interface is not registered in the global IORegistry, then keeps a read-only connection open while the app is running.
+
 DJI Mic, Mic 2, Mic 3, and other DJI audio devices are recognized and checked for standard HID battery information. If a device does not expose a readable interface, MicPilot reports the battery as unavailable rather than inventing a percentage.
 
 Battery support is best effort because these manufacturers do not provide a stable public macOS battery API for every model and firmware version.

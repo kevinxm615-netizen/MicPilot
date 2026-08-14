@@ -1,35 +1,38 @@
 import Foundation
+import DJIUSBTransport
 import IOKit
-import IOUSBHost
 
 final class DJIMicBatteryProvider {
     static let vendorID = 0x2CA3
     static let micMiniProductID = 0x4011
+    private var transport: OpaquePointer?
 
-    private let ioQueue = DispatchQueue(label: "AudioInputSwitcher.dji-usb")
+    deinit {
+        if let transport {
+            DJIUSBTransportClose(transport)
+        }
+    }
 
     func sample() -> WirelessMicBatteryStatus {
-        guard let service = Self.findMicMiniInterface() else {
-            return .receiverDisconnected
-        }
-        defer { IOObjectRelease(service) }
-
-        do {
-            let hostInterface = try IOUSBHostInterface(
-                __ioService: service,
-                options: [],
-                queue: ioQueue,
-                interestHandler: nil
+        if transport == nil {
+            var openStatus: Int32 = 0
+            transport = DJIUSBTransportOpen(
+                UInt16(Self.vendorID),
+                UInt16(Self.micMiniProductID),
+                6,
+                0x86,
+                &openStatus
             )
-            defer { hostInterface.destroy() }
+        }
+        guard let transport else { return .receiverDisconnected }
 
-            let pipe = try hostInterface.copyPipe(withAddress: 0x86)
-            var stream: [UInt8] = []
-            var sawV1Heartbeat = false
-            var sawConnectedTransmitter = false
+        var stream: [UInt8] = []
+        var sawV1Heartbeat = false
+        var sawConnectedTransmitter = false
 
-            for _ in 0..<6 {
-                guard let chunk = readChunk(from: pipe) else { continue }
+        for _ in 0..<6 {
+            switch readChunk(from: transport) {
+            case .data(let chunk):
                 stream.append(contentsOf: chunk)
                 for frame in Self.takeFrames(from: &stream) {
                     if Self.isV1Heartbeat(frame) {
@@ -41,18 +44,22 @@ final class DJIMicBatteryProvider {
                         return .available(model: "DJI Mic Mini / Mini 2", transmitters: parsed.batteries)
                     }
                 }
+            case .timeout:
+                continue
+            case .disconnected:
+                DJIUSBTransportClose(transport)
+                self.transport = nil
+                return .receiverDisconnected
             }
-
-            if sawConnectedTransmitter {
-                return .unavailable(reason: "DJI 发射器已连接，但本次状态推送尚未包含电量")
-            }
-            if sawV1Heartbeat {
-                return .unavailable(reason: "DJI 接收器仍使用 v1 固件；升级固件后才能读取发射器电量")
-            }
-            return .transmitterDisconnected(model: "DJI Mic Mini / Mini 2")
-        } catch {
-            return .unavailable(reason: "无法打开 DJI 接收器状态接口：\(error.localizedDescription)")
         }
+
+        if sawConnectedTransmitter {
+            return .unavailable(reason: "DJI 发射器已连接，但本次状态推送尚未包含电量")
+        }
+        if sawV1Heartbeat {
+            return .unavailable(reason: "DJI 接收器仍使用 v1 固件；升级固件后才能读取发射器电量")
+        }
+        return .transmitterDisconnected(model: "DJI Mic Mini / Mini 2")
     }
 
     static func parseV2Status(_ frame: [UInt8]) -> (connected: Bool, batteries: [WirelessMicTransmitterBattery])? {
@@ -122,39 +129,20 @@ final class DJIMicBatteryProvider {
         frame.count >= 12 && frame[9] == 0x5B && frame[10] == 0x03 && frame[11] == 0x00
     }
 
-    private func readChunk(from pipe: IOUSBHostPipe) -> [UInt8]? {
-        guard let data = NSMutableData(length: 512) else { return nil }
-        let semaphore = DispatchSemaphore(value: 0)
-        var completionStatus = kIOReturnError
-        var bytesTransferred = 0
-
-        do {
-            try pipe.enqueueIORequest(
-                with: data,
-                completionTimeout: 0.25,
-                completionHandler: { status, count in
-                    completionStatus = status
-                    bytesTransferred = count
-                    semaphore.signal()
-                }
-            )
-        } catch {
-            return nil
-        }
-
-        guard semaphore.wait(timeout: .now() + 0.4) == .success,
-              completionStatus == kIOReturnSuccess,
-              bytesTransferred > 0 else { return nil }
-        return Array(Data(bytes: data.bytes, count: bytesTransferred))
+    private enum ReadResult {
+        case data([UInt8])
+        case timeout
+        case disconnected
     }
 
-    private static func findMicMiniInterface() -> io_service_t? {
-        guard let matching = IOServiceMatching("IOUSBHostInterface") as NSMutableDictionary? else {
-            return nil
+    private func readChunk(from transport: OpaquePointer) -> ReadResult {
+        var bytes = [UInt8](repeating: 0, count: 512)
+        var length = UInt32(bytes.count)
+        let status = DJIUSBTransportRead(transport, &bytes, &length, 250)
+        if status == kIOReturnTimeout { return .timeout }
+        guard status == kIOReturnSuccess, length > 0, length <= bytes.count else {
+            return .disconnected
         }
-        matching["idVendor"] = NSNumber(value: vendorID)
-        matching["idProduct"] = NSNumber(value: micMiniProductID)
-        matching["bInterfaceNumber"] = NSNumber(value: 6)
-        return IOServiceGetMatchingService(kIOMainPortDefault, matching)
+        return .data(Array(bytes.prefix(Int(length))))
     }
 }
