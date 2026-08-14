@@ -11,13 +11,20 @@ let package = Package(
         .executable(name: "AudioInputSwitcher", targets: ["AudioInputSwitcher"])
     ],
     targets: [
+        .target(
+            name: "DJIUSBTransport",
+            publicHeadersPath: "include",
+            linkerSettings: [
+                .linkedFramework("IOKit")
+            ]
+        ),
         .executableTarget(
             name: "AudioInputSwitcher",
+            dependencies: ["DJIUSBTransport"],
             linkerSettings: [
                 .linkedFramework("AppKit"),
                 .linkedFramework("CoreAudio"),
                 .linkedFramework("IOKit"),
-                .linkedFramework("IOUSBHost"),
                 .linkedFramework("ServiceManagement")
             ]
         )
