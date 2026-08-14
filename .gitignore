@@ -1,0 +1,15 @@
+# macOS
+.DS_Store
+*.app
+
+# Swift Package Manager build artifacts
+.build/
+.swiftpm/
+
+# Local development backups
+backups/
+
+# Xcode
+xcuserdata/
+DerivedData/
+*.xcworkspace
