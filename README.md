@@ -1,5 +1,7 @@
 # MicPilot
 
+[简体中文](README.md) | [English](README_EN.md)
+
 <img src="Resources/AppIconMaster.png" width="120" alt="MicPilot 图标" align="right" />
 
 原生 macOS 菜单栏麦克风切换器，一键切换系统默认音频输入设备，并在菜单中实时显示兼容无线麦克风的发射器电量。
